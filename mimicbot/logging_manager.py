@@ -10,9 +10,9 @@ load_dotenv()
 BASE_PATH = os.getenv('BASE_PATH')
 
 def create_logger(path):
-    created_logger = logging.getLogger('bankerbot_logger')
+    created_logger = logging.getLogger('mimicbot_logger')
 
-    file_path = os.path.join(path, "bankerbot_log.txt")
+    file_path = os.path.join(path, "mimicbot_log.txt")
 
     handler = TimedRotatingFileHandler(file_path,
                                        when="d",

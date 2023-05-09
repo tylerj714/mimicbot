@@ -2,7 +2,7 @@
 import os
 import discord
 from dotenv import load_dotenv
-from discord import app_commands, Member, Guild
+from discord import app_commands
 from typing import List, Optional, Literal
 import mimicbot_dom
 from mimicbot_dom import Game, Watcher
@@ -12,7 +12,6 @@ import time
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD_ID = int(os.getenv('GUILD_ID'))
-VOTE_CHANNEL = int(os.getenv('VOTE_CHANNEL'))
 BASE_PATH = os.getenv('BASE_PATH')
 
 
@@ -55,14 +54,9 @@ async def get_watchers(substr: str, watchers: List[Watcher]) -> List[Watcher]:
 
 
 @client.event
-async def on_ready():
-    logger.info(f'{client.user.name} has connected to Discord!')
-
-
-@client.event
 async def on_message(message):
     # Don't copy bot messages to create a loop
-    if message.sender.id == client.user.id:
+    if message.author.id == client.user.id:
         return
 
     game = await get_game(BASE_PATH)
@@ -78,13 +72,13 @@ async def on_message(message):
             mimic_message = message.content
 
             if watcher.with_timestamps:
-                mimic_message = "[" + message.created_at + "] " + mimic_message
+                mimic_message = "[<t:" + str(int(message.created_at.timestamp())) + ">] " + mimic_message
 
             if watcher.with_users:
-                mimic_message = "[" + message.sender.display_name + "] " + mimic_message
+                mimic_message = "[" + message.author.display_name + "] " + mimic_message
 
             await message.guild.get_channel(watcher.copy_to_channel_id).send(mimic_message)
-
+    return
 
 @tree.command(name="toggle-activity",
               description="Enables/Disables bot commands for players",
@@ -123,31 +117,37 @@ async def clear_messages(interaction: discord.Interaction,
               guild=discord.Object(id=GUILD_ID))
 @app_commands.default_permissions(manage_guild=True)
 async def create_mimic(interaction: discord.Interaction,
-                       watchedChannel: discord.TextChannel,
-                       copyToChannel: discord.TextChannel,
-                       withTimestamp: Optional[Literal['True', 'False']],
-                       withUser: Optional[Literal['True', 'False']]
+                       watched_channel: discord.TextChannel,
+                       copy_to_channel: discord.TextChannel,
+                       with_timestamp: Optional[Literal['True', 'False']],
+                       with_user: Optional[Literal['True', 'False']]
                        ):
     log_interaction_call(interaction)
-    if not withTimestamp:
-        withTimestamp = False
-    if not withUser:
-        withUser = False
+    if not with_timestamp:
+        with_timestamp = False
+    if not with_user:
+        with_user = False
 
     game = await get_game(BASE_PATH)
 
-    watcher_name = watchedChannel.name + " => " + copyToChannel.name
-    watcher = Watcher(watcher_name=watcher_name, watched_channel_id=watchedChannel.id, copy_to_channel_id=copyToChannel.id,
-                      with_timestamps=withTimestamp, with_users=withUser)
+    existing_watcher = game.get_watcher(int(watched_channel.id), int(copy_to_channel.id))
 
-    game.add_watcher(watcher)
+    if existing_watcher is None:
+        watcher_name = watched_channel.name + " => " + copy_to_channel.name
+        watcher = Watcher(watcher_name=watcher_name, watched_channel_id=watched_channel.id, copy_to_channel_id=copy_to_channel.id,
+                          with_timestamps=with_timestamp, with_users=with_user)
+        game.add_watcher(watcher)
+    # Update existing watcher if it already exists
+    else:
+        existing_watcher.with_timestamps = with_timestamp
+        existing_watcher.with_users = with_user
 
     await write_game(game, BASE_PATH)
-    await interaction.response.send_message(f'Created watcher for {watchedChannel.name} copying to {copyToChannel.name}', ephemeral=True)
+    await interaction.response.send_message(f'Created watcher for {watched_channel.name} copying to {copy_to_channel.name}', ephemeral=True)
 
 
 @tree.command(name="remove-mimic",
-              description="Creates a mimic that watches a channel and copies all text into another channel",
+              description="Removes an existing mimic watcher",
               guild=discord.Object(id=GUILD_ID))
 @app_commands.default_permissions(manage_guild=True)
 @app_commands.autocomplete(watcher=watcher_list_autocomplete)
